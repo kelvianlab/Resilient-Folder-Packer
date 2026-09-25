@@ -320,12 +320,14 @@ def cmd_pack(args):
     packer = CompressingWriter(chunks, codec, args.level)
     done = [0, 0]  # files, bytes
 
-    def report(_tarinfo):
+    def report(tarinfo):
+        if tarinfo.isdir():
+            return tarinfo
         done[0] += 1
         if done[0] % 50 == 0 or done[0] == files:
             pct = (done[0] / files * 100) if files else 100
             say("  packed %d/%d files (%.0f%%)   " % (done[0], files, pct), end="\r")
-        return _tarinfo
+        return tarinfo
 
     say("")
     root_name = os.path.basename(src.rstrip(os.sep))
