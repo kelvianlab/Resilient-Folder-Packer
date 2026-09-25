@@ -17,7 +17,7 @@ import sys
 import tarfile
 import time
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 MANIFEST_SUFFIX = ".rfpack.json"
 DEFAULT_CHUNK_MB = 64
@@ -616,6 +616,11 @@ def main(argv=None):
         say("\nStopped. Nothing was left half-written except the chunk in progress; "
             "re-run pack to start over.")
         return 130
+    except BrokenPipeError:
+        # Output was piped into something that stopped reading, e.g. `| head`.
+        # Redirect stdout so the interpreter's own flush at exit stays quiet.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 0
 
 
 if __name__ == "__main__":
