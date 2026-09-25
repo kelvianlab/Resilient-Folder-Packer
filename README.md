@@ -24,6 +24,25 @@ Packed with `rfpack`, the same folders become a handful of chunk files that copy
 
 ## Get it
 
+### Windows: one .exe, no Python needed
+
+Grab `rfpack.exe` from the [latest release](../../releases/latest) and copy it
+anywhere — a USB stick, a network share, straight into the folder you're
+packing. Python and Zstandard are already baked into the file, so it runs on
+a bare Windows PC that has nothing else installed:
+
+```powershell
+.\rfpack.exe doctor
+.\rfpack.exe pack "D:\PURCHASE ORDER\PO NON PPN" -o E:\kirim --chunk-mb 64
+```
+
+This is the version to copy onto a PC you don't control and don't want to
+set anything up on first — the whole point of this tool. Put `rfpack.exe`
+inside the folder of chunks you send over, and the destination PC can unpack
+without downloading anything either.
+
+### Any OS: the Python script
+
 Grab the repository however you prefer — there is nothing to build:
 
 ```bash
@@ -36,13 +55,7 @@ No git? Open the repository page, click **Code → Download ZIP**, extract it, a
 run the same command inside the extracted folder. The only file that actually
 matters is `rfpack.py`; the launchers and docs are convenience.
 
-## Run it without installing anything
-
 Copy `rfpack.py` (and the matching launcher, if you like) onto a USB stick, a network share, or straight into the folder you are packing. Any machine with Python 3.8 or newer can run it as-is:
-
-```bash
-python rfpack.py doctor
-```
 
 | Platform | Command |
 |---|---|
