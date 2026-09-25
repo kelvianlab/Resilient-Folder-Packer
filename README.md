@@ -2,48 +2,225 @@
 
 A blazing-fast Zstd archiver built to transfer thousands of small files over unstable WiFi, LAN, VPN, or Tailscale connections. Auto-splits into chunks so you never lose transfer progress.
 
-Copying 2,800 small Excel files across a network share is slow for a reason: every single file costs a round trip. Packing them into one archive fixes that — until the WiFi or the VPN drops at 90% and you start the whole transfer again.
+---
 
-`rfpack` packs the folder into numbered chunks with a checksum for each one. If the link dies mid-transfer, you re-send the two chunks that did not make it, not the 480 MB.
+## The problem this solves
+
+Copying 3,000 small Excel files across a network share is painfully slow, because every single file costs a network round trip. Zipping them first fixes that — until the WiFi or the VPN drops at 90% and you start the entire transfer over.
+
+`rfpack` packs the folder into one compressed stream, then splits it into numbered chunks with a checksum for each one. If the connection dies mid-transfer, you re-send the two chunks that failed — not the whole 480 MB.
+
+**A real case:** 2,866 purchase-order spreadsheets (481 MB) had to move from an office file server to a PC over LAN, then to a laptop over Tailscale. Over SMB it crawled, and every dropped connection meant starting again. Packed with `rfpack`, the same folders became a handful of chunk files that copy at full link speed.
 
 ---
 
-## Why it exists
+# Quick start (Windows)
 
-A real case: two folders of purchase-order spreadsheets on an office file server — 2,866 files, about 481 MB — had to go from the server to a PC over LAN, then from that PC to a laptop over Tailscale. Over SMB the per-file overhead made it crawl, and every dropped connection meant starting over.
+**You do not need Python, admin rights, or any installation.** Five steps.
 
-Packed with `rfpack`, the same folders become a handful of chunk files that copy at full link speed, and a dropped connection costs one chunk.
+### Step 1 — Download the tool
 
-## What it does
+Go to the [latest release](../../releases/latest) and download **`rfpack.exe`**.
 
-- **One stream, not thousands of files.** The folder is tarred and compressed in a single pass, so the network sees a few large files instead of thousands of tiny ones.
-- **Auto-chunking.** The output is split into fixed-size parts (64 MB by default). Re-send only the parts that failed.
-- **Per-chunk SHA-256.** `rfpack verify` tells you exactly which parts are missing or damaged, before you try to unpack.
-- **Zstandard when it is there, standard library when it is not.** With `zstandard` installed you get Zstd speed; without it, the same file still works using gzip/xz from the Python standard library.
-- **Portable.** One `.py` file. No installer, no admin rights, no dependencies required.
+That single file is the entire program. Python and the compression libraries are already built into it.
 
-## Get it
+### Step 2 — Put it where you can find it
 
-### Windows: one .exe, no Python needed
+Move `rfpack.exe` somewhere simple, for example `C:\rfpack\` or a USB stick. Avoid deep paths with lots of spaces — it just makes typing harder later.
 
-Grab `rfpack.exe` from the [latest release](../../releases/latest) and copy it
-anywhere — a USB stick, a network share, straight into the folder you're
-packing. Python and Zstandard are already baked into the file, so it runs on
-a bare Windows PC that has nothing else installed:
+### Step 3 — Open a terminal *in that folder*
+
+This is the step people get wrong most often. The terminal has to be "standing inside" the folder that holds `rfpack.exe`.
+
+1. Open that folder in File Explorer — you should see `rfpack.exe` listed.
+2. Click the **address bar** at the top (where the folder path is shown).
+3. Type `powershell` and press **Enter**.
+
+A black window opens, already pointed at the right folder.
+
+> If typing `powershell` opens another Explorer window instead of a terminal, type `powershell.exe` instead, or hold **Shift** and right-click an empty area of the folder, then choose **Open PowerShell window here**.
+
+To confirm you are in the right place, type:
+
+```powershell
+dir
+```
+
+If `rfpack.exe` appears in the list, you are good.
+
+### Step 4 — Check the tool runs
 
 ```powershell
 .\rfpack.exe doctor
+```
+
+> **The `.\` at the front is required.** PowerShell refuses to run a program from the current folder without it. `rfpack.exe doctor` alone will fail; `.\rfpack.exe doctor` works.
+
+You should see something like:
+
+```
+Resilient Folder Packer 1.1.0
+Python  : 3.12.0
+Platform: win32
+
+Codecs available here:
+  zstd   zstandard
+  xz     lzma (stdlib)
+  gz     zlib (stdlib)
+  raw    no compression
+
+Free space in C:\rfpack: 1.6 TB
+```
+
+If you see that, everything works.
+
+### Step 5 — Pack your folder
+
+```powershell
 .\rfpack.exe pack "D:\PURCHASE ORDER\PO NON PPN" -o E:\kirim --chunk-mb 64
 ```
 
-This is the version to copy onto a PC you don't control and don't want to
-set anything up on first — the whole point of this tool. Put `rfpack.exe`
-inside the folder of chunks you send over, and the destination PC can unpack
-without downloading anything either.
+Replace `D:\PURCHASE ORDER\PO NON PPN` with the folder you want to send, and `E:\kirim` with where the chunks should be written.
 
-### Any OS: the Python script
+> **Quotes matter.** If a path contains spaces, it must be wrapped in `"double quotes"`, exactly as above. Without them Windows reads it as several separate arguments and the command fails.
 
-Grab the repository however you prefer — there is nothing to build:
+Not sure yet? Add `--dry-run` to the end. It reports what *would* happen and writes nothing.
+
+---
+
+# The full transfer, start to finish
+
+This is the actual workflow the tool was built for.
+
+### On the source PC
+
+```powershell
+.\rfpack.exe pack "D:\PURCHASE ORDER\PO NON PPN" -o E:\kirim --chunk-mb 64
+```
+
+`E:\kirim` now contains:
+
+```
+PO NON PPN.part001
+PO NON PPN.part002
+PO NON PPN.rfpack.json     <- the list of chunks and their checksums
+```
+
+**Copy `rfpack.exe` into `E:\kirim` as well.** The destination PC needs the tool to unpack, and this way the folder carries everything it needs — nothing to download on the other side.
+
+### Move the folder
+
+Copy `E:\kirim` across however you normally would: a USB stick, Explorer drag-and-drop, `scp`, a Tailscale share. The tool does not move files for you; it makes the payload transfer-friendly so your existing method stops choking.
+
+### On the destination PC
+
+Open a terminal inside the copied folder (Step 3 above), then:
+
+```powershell
+.\rfpack.exe verify .
+```
+
+The `.` means "this folder". You will get one of two answers:
+
+```
+All 8 part(s) are present and intact. Ready to unpack.
+```
+
+or
+
+```
+6 of 8 part(s) are good. Re-send only these:
+  PO NON PPN.part004           missing
+  PO NON PPN.part007           checksum mismatch - re-send this part
+```
+
+In the second case, re-copy **only those two files**, then run `verify` again. This is the whole point of the tool.
+
+Once everything is intact:
+
+```powershell
+.\rfpack.exe unpack . --into C:\hasil
+```
+
+Every chunk is checked before extraction, and the rebuilt data is verified against the original checksum afterwards. If a chunk is still damaged, it refuses to extract rather than leaving you a half-restored folder.
+
+---
+
+# Command reference
+
+| Command | What it does |
+|---|---|
+| `pack <folder>` | Compress a folder into numbered chunks + a manifest |
+| `verify <folder>` | List which chunks are missing or damaged |
+| `unpack <folder> --into <dest>` | Verify the chunks and restore the folder |
+| `info <folder>` | Show what an archive holds, without unpacking it |
+| `doctor` | Show available codecs, version, free disk space |
+
+For `verify`, `unpack` and `info` you can point at the folder holding the chunks (`.` for the current one) — you do not need to type the manifest filename.
+
+### Options
+
+| Flag | Works with | Meaning |
+|---|---|---|
+| `--chunk-mb N` | pack | Chunk size in MB (default 64) |
+| `--codec auto\|zstd\|xz\|gz\|raw` | pack | Compression backend. `auto` picks Zstd when available |
+| `--level N` | pack | Compression level, higher is smaller and slower (default 6) |
+| `--dry-run` | pack, unpack | Report what would happen, write nothing |
+| `--force` | pack, unpack | Overwrite existing chunks / write into an existing folder |
+| `--quick` | verify | Check names and sizes only, skip checksums |
+| `--skip-verify` | unpack | Skip the checksum pass when you already ran `verify` |
+
+### Choosing a chunk size
+
+| Your connection | Suggested `--chunk-mb` |
+|---|---|
+| Gigabit LAN, stable | 256 |
+| Office WiFi | 64 (default) |
+| Tailscale / VPN over mobile or flaky WiFi | 16–32 |
+
+Smaller chunks mean less work lost per dropped connection, and more files to keep track of. 64 MB is a sensible middle.
+
+---
+
+# Troubleshooting
+
+### "Windows protected your PC" when running the .exe
+
+Windows shows this for any program it hasn't seen before. `rfpack.exe` is not code-signed, because a signing certificate costs money this project does not spend.
+
+Click **More info**, then **Run anyway**.
+
+If you would rather not trust a binary you did not build, that is a fair instinct — use the Python script instead (see below). The full source is in this repository, and the `.exe` is built from it automatically by [GitHub Actions](../../actions), in public, with no manual step in between.
+
+### "rfpack.exe is not recognized as the name of a cmdlet"
+
+You left out the `.\` prefix. Use `.\rfpack.exe doctor`, not `rfpack.exe doctor`.
+
+### "The system cannot find the path specified"
+
+Your terminal is standing in the wrong folder. Type `dir` — if you do not see `rfpack.exe` in the list, go back to Step 3.
+
+### The command fails on a folder name with spaces
+
+Wrap the path in double quotes:
+
+```powershell
+.\rfpack.exe pack "D:\PURCHASE ORDER\PO NON PPN" -o E:\kirim
+```
+
+### `verify` says a part is damaged
+
+That is the tool doing its job. Re-copy just the files it named, then run `verify` again. You do not need to re-send anything else.
+
+### It says "this archive is zstd-compressed and this machine has no zstd support"
+
+You are unpacking with the Python script on a machine without the `zstandard` package. Either run `pip install zstandard`, or use `rfpack.exe`, which has it built in.
+
+---
+
+# Other systems: the Python script
+
+On Linux, macOS, or any machine that already has Python 3.8+, you can run the script directly — no build, no install:
 
 ```bash
 git clone https://github.com/kelvianlab/Resilient-Folder-Packer
@@ -51,130 +228,42 @@ cd Resilient-Folder-Packer
 python rfpack.py doctor
 ```
 
-No git? Open the repository page, click **Code → Download ZIP**, extract it, and
-run the same command inside the extracted folder. The only file that actually
-matters is `rfpack.py`; the launchers and docs are convenience.
-
-Copy `rfpack.py` (and the matching launcher, if you like) onto a USB stick, a network share, or straight into the folder you are packing. Any machine with Python 3.8 or newer can run it as-is:
+No git? Click **Code → Download ZIP** on the repository page and extract it. The only file that matters is `rfpack.py`.
 
 | Platform | Command |
 |---|---|
-| Windows | `rfpack.cmd pack "D:\PURCHASE ORDER\PO NON PPN"` |
-| Linux / macOS | `./rfpack.sh pack ~/purchase-order` |
-| Anywhere | `python rfpack.py pack <folder>` |
+| Windows | `python rfpack.py pack "D:\PURCHASE ORDER\PO NON PPN"` |
+| Linux / macOS | `python3 rfpack.py pack ~/purchase-order` |
 
-`rfpack doctor` prints which codecs the machine supports and how much free disk space you have — run it first on an unfamiliar PC.
-
-For maximum speed, optionally add Zstandard on the machine that does the packing:
+Optional, for the fastest codec:
 
 ```bash
 pip install zstandard
 ```
 
-Without it, `--codec auto` falls back to gzip and everything else works the same.
+Without it the script falls back to gzip. Everything still works, just less quickly.
 
-## Usage
+---
 
-### Pack
+# What it does not do
 
-```bash
-python rfpack.py pack "D:\PURCHASE ORDER\PO NON PPN" -o E:\transfer --chunk-mb 64
-```
+- **It does not encrypt.** The chunks are plain compressed data. Use an encrypted transport, or encrypt the chunks yourself, if the contents are sensitive.
+- **It does not move files for you.** It makes the payload transfer-friendly; the copying is still done with whatever tool you already use.
+- **It does not follow symlinks**, and refuses to extract any entry that points outside the destination folder.
+- **It stores file contents and timestamps**, not Windows ACLs or alternate data streams.
 
-```
-Source : D:\PURCHASE ORDER\PO NON PPN
-Content: 1337 files, 212.7 MB
-Output : E:\transfer
-Codec  : zstd, level 6, 64 MB chunks
+# Safety
 
-Packed 38.4 MB into 1 chunk(s) of up to 64 MB in 4.2s (50.6 MB/s).
-Compressed to 18.1% of the original size.
-```
-
-You get:
-
-```
-PO NON PPN.part001
-PO NON PPN.part002
-PO NON PPN.rfpack.json     <- the manifest: chunk list + checksums
-```
-
-Copy that folder across however you like — `scp`, a Tailscale share, a USB stick, Explorer drag-and-drop.
-
-### Verify on the far side
-
-```bash
-python rfpack.py verify "PO NON PPN.rfpack.json"
-```
-
-```
-Archive: PO NON PPN (8 part(s), 483.1 MB)
-6 of 8 part(s) are good. Re-send only these:
-  PO NON PPN.part004           missing
-  PO NON PPN.part007           checksum mismatch - re-send this part
-```
-
-Re-copy just those two files and run `verify` again.
-
-### Unpack
-
-```bash
-python rfpack.py unpack "PO NON PPN.rfpack.json" --into "C:\restored"
-```
-
-Every chunk is checksummed before extraction, and the rebuilt stream is checked against the original hash afterwards. If a chunk is still bad, it refuses to extract rather than leaving you a half-restored folder.
-
-### All commands
-
-| Command | What it does |
-|---|---|
-| `pack <folder>` | Compress a folder into numbered chunks + a manifest |
-| `verify <manifest>` | List which chunks are missing or damaged |
-| `unpack <manifest> --into <dest>` | Verify the chunks and restore the folder |
-| `info <manifest>` | Show what an archive holds, without unpacking it |
-| `doctor` | Show available codecs, Python version, free disk space |
-
-Useful flags:
-
-| Flag | Applies to | Meaning |
-|---|---|---|
-| `--chunk-mb N` | pack | Chunk size in MB (default 64). Smaller on a very flaky link. |
-| `--codec auto\|zstd\|xz\|gz\|raw` | pack | Backend. `auto` picks Zstd when available, else gzip. |
-| `--level N` | pack | Compression level — higher is smaller and slower (default 6). |
-| `--dry-run` | pack, unpack | Report what would happen, write nothing. |
-| `--force` | pack, unpack | Overwrite existing chunks / write into an existing folder. |
-| `--quick` | verify | Check names and sizes only, skip checksums. |
-| `--skip-verify` | unpack | Skip the checksum pass when you already ran `verify`. |
-
-## Picking a chunk size
-
-| Link | Suggested `--chunk-mb` |
-|---|---|
-| Gigabit LAN, stable | 256 |
-| Office WiFi | 64 (default) |
-| Tailscale / VPN over mobile or flaky WiFi | 16–32 |
-
-Smaller chunks mean less work lost per drop, and more files to keep track of. 64 MB is a sensible middle.
-
-## What it does not do
-
-- It does not encrypt. The chunks are plain compressed data — use an encrypted transport, or encrypt the chunks yourself, if the content is sensitive.
-- It does not move files for you. It makes the payload transfer-friendly; the copying is still yours to do with whatever tool you already use.
-- It does not follow symlinks, and refuses to extract any archive entry that points outside the destination folder.
-- It stores file contents and timestamps, not Windows ACLs or alternate data streams.
-
-## Requirements
-
-- Python 3.8 or newer. Nothing else is required.
-- `zstandard` (optional) for the fastest codec.
-
-## Safety notes
-
-- `pack` refuses to overwrite chunks that already exist unless you pass `--force`.
+- `pack` refuses to overwrite existing chunks unless you pass `--force`.
 - `unpack` refuses to write into an existing destination folder unless you pass `--force`.
 - Both support `--dry-run`.
 - Extraction rejects path-traversal entries and skips symlinks, so an archive from someone else cannot write outside the folder you chose.
 
-## License
+# Requirements
+
+- **`rfpack.exe`**: nothing. Windows 10 or later, 64-bit.
+- **`rfpack.py`**: Python 3.8 or newer. `zstandard` is optional.
+
+# License
 
 MIT — see [LICENSE](LICENSE).
