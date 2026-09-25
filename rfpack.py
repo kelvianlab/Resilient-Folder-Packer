@@ -363,8 +363,10 @@ def cmd_pack(args):
         % (human(chunks.total_bytes), len(chunks.parts), args.chunk_mb, elapsed, human(raw_total / elapsed)))
     say("Compressed to %.1f%% of the original size." % ratio)
     say("")
+    manifest_name = os.path.basename(manifest_path)
+    hint = manifest_name if " " not in manifest_name else '"%s"' % manifest_name
     say("Send the whole folder over. On the other side run:")
-    say("  python rfpack.py unpack %s --into <destination>" % os.path.basename(manifest_path))
+    say("  python rfpack.py unpack %s --into <destination>" % hint)
     return 0
 
 
