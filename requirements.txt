@@ -1,0 +1,3 @@
+# Optional. rfpack runs on the standard library alone; this only unlocks the
+# faster Zstandard codec (--codec zstd / --codec auto).
+zstandard>=0.22.0
