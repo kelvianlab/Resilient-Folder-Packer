@@ -22,6 +22,20 @@ Packed with `rfpack`, the same folders become a handful of chunk files that copy
 - **Zstandard when it is there, standard library when it is not.** With `zstandard` installed you get Zstd speed; without it, the same file still works using gzip/xz from the Python standard library.
 - **Portable.** One `.py` file. No installer, no admin rights, no dependencies required.
 
+## Get it
+
+Grab the repository however you prefer — there is nothing to build:
+
+```bash
+git clone https://github.com/kelvianlab/Resilient-Folder-Packer
+cd Resilient-Folder-Packer
+python rfpack.py doctor
+```
+
+No git? Open the repository page, click **Code → Download ZIP**, extract it, and
+run the same command inside the extracted folder. The only file that actually
+matters is `rfpack.py`; the launchers and docs are convenience.
+
 ## Run it without installing anything
 
 Copy `rfpack.py` (and the matching launcher, if you like) onto a USB stick, a network share, or straight into the folder you are packing. Any machine with Python 3.8 or newer can run it as-is:
