@@ -1,0 +1,34 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.9", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Turn off Windows long-path support so the tests hit the real 260-character limit
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -Value 0
+
+      - name: Test with the standard library only
+        run: python tests/test_rfpack.py ${{ runner.os == 'Windows' && '--expect-path-limit' || '' }}
+
+      - name: Test again with zstandard installed
+        run: |
+          pip install zstandard
+          python tests/test_rfpack.py ${{ runner.os == 'Windows' && '--expect-path-limit' || '' }}

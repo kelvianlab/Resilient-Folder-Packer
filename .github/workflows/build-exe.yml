@@ -1,19 +1,24 @@
 name: Build standalone rfpack.exe
 
 # Produces a single Windows .exe that needs no Python install on the
-# machine that runs it - the point of a tool meant to be copied onto a
-# PC you don't control and run immediately.
+# machine that runs it, and only publishes it after the full end-to-end
+# test suite has passed against that exact exe on a real Windows machine
+# with the 260-character path limit switched on.
 #
-# - Push a tag like "v1.1.0" to build the exe and attach it to a new
-#   GitHub Release automatically.
-# - Or run this workflow manually (Actions tab -> Run workflow) to get
-#   a downloadable build without cutting a release, e.g. to test a change.
+# - Push a tag like "v1.2.0" to build, test and attach the exe to a release.
+# - Or run it from the Actions tab. Fill in "release_tag" to publish a
+#   release from the run; leave it empty to only build and test.
 
 on:
   push:
     tags:
       - "v*.*.*"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Publish a release with this tag (e.g. v1.2.0). Leave empty to only build and test."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -34,13 +39,16 @@ jobs:
           pip install pyinstaller zstandard
 
       - name: Build rfpack.exe
-        run: |
-          pyinstaller --onefile --name rfpack --console rfpack.py
+        run: pyinstaller --onefile --name rfpack --console rfpack.py
 
-      - name: Smoke-test the built exe
+      - name: Turn off Windows long-path support so the tests hit the real 260-character limit
+        shell: pwsh
+        run: Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -Value 0
+
+      - name: Test the built exe end to end
         run: |
           .\dist\rfpack.exe doctor
-          .\dist\rfpack.exe --version
+          python tests\test_rfpack.py --exe dist\rfpack.exe --expect-path-limit
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -49,9 +57,20 @@ jobs:
           path: dist/rfpack.exe
           if-no-files-found: error
 
-      - name: Attach to release
+      - name: Attach to the release for this tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/rfpack.exe
           generate_release_notes: true
+
+      - name: Publish a release from this manual run
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ inputs.release_tag }}
+          files: dist/rfpack.exe
+          generate_release_notes: true
+          make_latest: true
