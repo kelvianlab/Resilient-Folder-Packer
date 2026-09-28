@@ -25,6 +25,24 @@ DEFAULT_LEVEL = 6
 READ_BLOCK = 1024 * 1024
 
 
+def winlong(path):
+    """Prefix an absolute path so Windows accepts it past the classic 260-
+    character MAX_PATH limit. A deeply nested office file tree (several
+    long, descriptive folder names stacked up) crosses that limit easily,
+    and without this prefix Windows raises FileNotFoundError even though
+    the file is really there. No-op on non-Windows and on already-prefixed
+    or relative/UNC-special paths.
+    """
+    if os.name != "nt":
+        return path
+    path = os.path.abspath(path)
+    if path.startswith("\\\\?\\"):
+        return path
+    if path.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + path.lstrip("\\")
+    return "\\\\?\\" + path
+
+
 # --------------------------------------------------------------------------- #
 # Compression backends
 # --------------------------------------------------------------------------- #
@@ -205,7 +223,7 @@ def sha256_file(path):
 def scan_source(src):
     files = 0
     total = 0
-    for root, _dirs, names in os.walk(src):
+    for root, _dirs, names in os.walk(winlong(src)):
         for name in names:
             path = os.path.join(root, name)
             if os.path.islink(path) or not os.path.isfile(path):
@@ -332,7 +350,7 @@ def cmd_pack(args):
     say("")
     root_name = os.path.basename(src.rstrip(os.sep))
     with tarfile.open(fileobj=packer, mode="w|", bufsize=READ_BLOCK) as tar:
-        tar.add(src, arcname=root_name, filter=report)
+        tar.add(winlong(src), arcname=root_name, filter=report)
     packer.close()
     chunks.close()
     say(" " * 60, end="\r")
@@ -439,7 +457,7 @@ def cmd_unpack(args):
         say("All parts verified.")
 
     probe = os.path.join(dest, manifest.get("root") or manifest["name"])
-    if os.path.exists(probe) and not args.force:
+    if os.path.exists(winlong(probe)) and not args.force:
         raise Usage(
             "%s already exists. Unpack somewhere else, or pass --force to write "
             "into it (existing files with the same names are overwritten)." % probe
@@ -456,8 +474,9 @@ def cmd_unpack(args):
     raw = _DecompressReader(stream, manifest["codec"])
     with tarfile.open(fileobj=raw, mode="r|", bufsize=READ_BLOCK) as tar:
         count = 0
+        dest_long = winlong(dest)
         for member in _safe_members(tar, dest):
-            tar.extract(member, dest)
+            tar.extract(member, dest_long)
             if not member.isdir():
                 count += 1
                 if count % 50 == 0:
