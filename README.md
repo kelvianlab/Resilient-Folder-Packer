@@ -6,11 +6,11 @@ A blazing-fast Zstd archiver built to transfer thousands of small files over uns
 
 ## The problem this solves
 
-Copying 3,000 small Excel files across a network share is painfully slow, because every single file costs a network round trip. Zipping them first fixes that — until the WiFi or the VPN drops at 90% and you start the entire transfer over.
+Copying thousands of small files across a network share is painfully slow, because every single file costs a network round trip. Zipping them first fixes that — until the WiFi or the VPN drops at 90% and you start the entire transfer over.
 
 `rfpack` packs the folder into one compressed stream, then splits it into numbered chunks with a checksum for each one. If the connection dies mid-transfer, you re-send the two chunks that failed — not the whole 480 MB.
 
-**A real case:** 2,866 purchase-order spreadsheets (481 MB) had to move from an office file server to a PC over LAN, then to a laptop over Tailscale. Over SMB it crawled, and every dropped connection meant starting again. Packed with `rfpack`, the same folders became a handful of chunk files that copy at full link speed.
+**A typical case:** a folder of 3,000 small documents (about 500 MB) has to move from a file server to a PC over LAN, then on to a laptop over Tailscale. File-by-file it crawls, and every dropped connection means starting again. Packed with `rfpack`, the same folder becomes a handful of chunk files that copy at full link speed.
 
 ---
 
@@ -77,10 +77,10 @@ If you see that, everything works.
 ### Step 5 — Pack your folder
 
 ```powershell
-.\rfpack.exe pack "D:\PURCHASE ORDER\PO NON PPN" -o E:\kirim --chunk-mb 64
+.\rfpack.exe pack "D:\Projects\Photo Archive" -o E:\transfer --chunk-mb 64
 ```
 
-Replace `D:\PURCHASE ORDER\PO NON PPN` with the folder you want to send, and `E:\kirim` with where the chunks should be written.
+Replace `D:\Projects\Photo Archive` with the folder you want to send, and `E:\transfer` with where the chunks should be written.
 
 > **Quotes matter.** If a path contains spaces, it must be wrapped in `"double quotes"`, exactly as above. Without them Windows reads it as several separate arguments and the command fails.
 
@@ -95,22 +95,22 @@ This is the actual workflow the tool was built for.
 ### On the source PC
 
 ```powershell
-.\rfpack.exe pack "D:\PURCHASE ORDER\PO NON PPN" -o E:\kirim --chunk-mb 64
+.\rfpack.exe pack "D:\Projects\Photo Archive" -o E:\transfer --chunk-mb 64
 ```
 
-`E:\kirim` now contains:
+`E:\transfer` now contains:
 
 ```
-PO NON PPN.part001
-PO NON PPN.part002
-PO NON PPN.rfpack.json     <- the list of chunks and their checksums
+Photo Archive.part001
+Photo Archive.part002
+Photo Archive.rfpack.json     <- the list of chunks and their checksums
 ```
 
-**Copy `rfpack.exe` into `E:\kirim` as well.** The destination PC needs the tool to unpack, and this way the folder carries everything it needs — nothing to download on the other side.
+**Copy `rfpack.exe` into `E:\transfer` as well.** The destination PC needs the tool to unpack, and this way the folder carries everything it needs — nothing to download on the other side.
 
 ### Move the folder
 
-Copy `E:\kirim` across however you normally would: a USB stick, Explorer drag-and-drop, `scp`, a Tailscale share. The tool does not move files for you; it makes the payload transfer-friendly so your existing method stops choking.
+Copy `E:\transfer` across however you normally would: a USB stick, Explorer drag-and-drop, `scp`, a Tailscale share. The tool does not move files for you; it makes the payload transfer-friendly so your existing method stops choking.
 
 ### On the destination PC
 
@@ -130,8 +130,8 @@ or
 
 ```
 6 of 8 part(s) are good. Re-send only these:
-  PO NON PPN.part004           missing
-  PO NON PPN.part007           checksum mismatch - re-send this part
+  Photo Archive.part004           missing
+  Photo Archive.part007           checksum mismatch - re-send this part
 ```
 
 In the second case, re-copy **only those two files**, then run `verify` again. This is the whole point of the tool.
@@ -139,7 +139,7 @@ In the second case, re-copy **only those two files**, then run `verify` again. T
 Once everything is intact:
 
 ```powershell
-.\rfpack.exe unpack . --into C:\hasil
+.\rfpack.exe unpack . --into C:\restored
 ```
 
 Every chunk is checked before extraction, and the rebuilt data is verified against the original checksum afterwards. If a chunk is still damaged, it refuses to extract rather than leaving you a half-restored folder.
@@ -205,7 +205,7 @@ Your terminal is standing in the wrong folder. Type `dir` — if you do not see 
 Wrap the path in double quotes:
 
 ```powershell
-.\rfpack.exe pack "D:\PURCHASE ORDER\PO NON PPN" -o E:\kirim
+.\rfpack.exe pack "D:\Projects\Photo Archive" -o E:\transfer
 ```
 
 ### `verify` says a part is damaged
@@ -232,8 +232,8 @@ No git? Click **Code → Download ZIP** on the repository page and extract it. T
 
 | Platform | Command |
 |---|---|
-| Windows | `python rfpack.py pack "D:\PURCHASE ORDER\PO NON PPN"` |
-| Linux / macOS | `python3 rfpack.py pack ~/purchase-order` |
+| Windows | `python rfpack.py pack "D:\Projects\Photo Archive"` |
+| Linux / macOS | `python3 rfpack.py pack ~/photo-archive` |
 
 Optional, for the fastest codec:
 
