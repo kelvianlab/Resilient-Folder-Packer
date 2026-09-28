@@ -59,8 +59,8 @@ If `rfpack.exe` appears in the list, you are good.
 You should see something like:
 
 ```
-Resilient Folder Packer 1.1.0
-Python  : 3.12.0
+Resilient Folder Packer 1.2.0
+Python  : 3.12.10
 Platform: win32
 
 Codecs available here:
@@ -146,6 +146,38 @@ Every chunk is checked before extraction, and the rebuilt data is verified again
 
 ---
 
+# What happens when something goes wrong halfway
+
+A pack of tens of thousands of files can run for an hour. It is built so that one bad file never throws that hour away.
+
+| Situation | What `rfpack` does |
+|---|---|
+| A file is open and locked by another program, you have no permission to read it, or it is deleted while packing | Skips that one file, keeps going, and lists it at the end |
+| A file changes size or fails part-way through being read | Keeps the archive valid, stores what it could, and flags that file as incomplete |
+| A path is longer than Windows' usual 260-character limit | Handled — deeply nested folders with long names pack and unpack normally |
+| A folder is a shortcut/link to somewhere else | Not followed (so it can't loop forever), listed at the end |
+| The output drive does not have enough space | Refuses to start, and tells you how much is needed |
+| The output drive fills up anyway | Stops with a clear message; the source folder is never touched |
+| The PC would go to sleep | Kept awake until the job is done |
+
+When anything was skipped, the finish looks like this:
+
+```
+Packed 79,601 of 79,629 files (49.7 GB) into 612 chunk(s) in 48m12s.
+
+WARNING: 28 item(s) could NOT be packed and are not in the archive:
+  D:\Projects\Photo Archive\2024\~$budget.xlsx
+      -> cannot be opened: Permission denied
+  ...
+Full list: E:\transfer\Photo Archive.rfpack-log.txt
+```
+
+Close the program that has those files open and pack again, or copy the handful of files by hand — everything else is already in the archive.
+
+**One honest limit:** if the pack itself is interrupted — the power goes out, or you close the window — it cannot pick up where it stopped. Run the same command again with `--force` and it starts over. The source folder is only ever read, never changed, so nothing is lost except time.
+
+---
+
 # Command reference
 
 | Command | What it does |
@@ -169,6 +201,16 @@ For `verify`, `unpack` and `info` you can point at the folder holding the chunks
 | `--force` | pack, unpack | Overwrite existing chunks / write into an existing folder |
 | `--quick` | verify | Check names and sizes only, skip checksums |
 | `--skip-verify` | unpack | Skip the checksum pass when you already ran `verify` |
+| `--skip-space-check` | pack, unpack | Start even if the drive may be too small (only if you know the data compresses well) |
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Done, nothing skipped |
+| `1` | Done, but some items were skipped, incomplete, or a part needs re-sending — the list is printed |
+| `2` | Nothing was done — the error message says why |
+| `130` | You stopped it with Ctrl+C |
 
 ### Choosing a chunk size
 
@@ -199,6 +241,20 @@ You left out the `.\` prefix. Use `.\rfpack.exe doctor`, not `rfpack.exe doctor`
 ### "The system cannot find the path specified"
 
 Your terminal is standing in the wrong folder. Type `dir` — if you do not see `rfpack.exe` in the list, go back to Step 3.
+
+### The finish says some items "could NOT be packed"
+
+Everything else is in the archive. The usual reasons, next to each file in the list:
+
+- **Permission denied / being used by another process** — the file is open in Excel, AutoCAD, Outlook or similar. Close it and pack again, or copy that one file by hand.
+- **Files starting with `~$`** — these are temporary lock files Office creates while a document is open. They are safe to ignore.
+- **Shortcut/link to another folder** — deliberately not followed. Pack the target folder separately if you need it.
+
+The full list is saved next to the chunks as `<name>.rfpack-log.txt`.
+
+### An older version stopped with `FileNotFoundError` on a very long path
+
+Versions before 1.2.0 could not read paths longer than 260 characters and stopped halfway. Download the [latest release](../../releases/latest) — this is fixed.
 
 ### The command fails on a folder name with spaces
 
@@ -258,11 +314,15 @@ Without it the script falls back to gzip. Everything still works, just less quic
 - `unpack` refuses to write into an existing destination folder unless you pass `--force`.
 - Both support `--dry-run`.
 - Extraction rejects path-traversal entries and skips symlinks, so an archive from someone else cannot write outside the folder you chose.
+- `pack` refuses an output folder inside the folder being packed, which would make the archive pack itself.
+- The source folder is only ever read. No command changes or deletes anything in it.
 
 # Requirements
 
 - **`rfpack.exe`**: nothing. Windows 10 or later, 64-bit.
-- **`rfpack.py`**: Python 3.8 or newer. `zstandard` is optional.
+- **`rfpack.py`**: Python 3.9 or newer. `zstandard` is optional.
+
+Every release is tested end to end on Windows (with the 260-character path limit switched on) and Linux before it is published — see [`tests/`](tests/) and the [Actions tab](../../actions).
 
 # License
 
