@@ -72,7 +72,7 @@ Codecs available here:
 Free space in C:\rfpack: 1.6 TB
 ```
 
-If you see that, everything works.
+If you see that, everything works. **Check that the first line says `1.2.0` or newer** — older versions could stop halfway on very long folder paths. If yours is older, download the latest release again (Step 1).
 
 ### Step 5 — Pack your folder
 
@@ -84,7 +84,35 @@ Replace `D:\Projects\Photo Archive` with the folder you want to send, and `E:\tr
 
 > **Quotes matter.** If a path contains spaces, it must be wrapped in `"double quotes"`, exactly as above. Without them Windows reads it as several separate arguments and the command fails.
 
-Not sure yet? Add `--dry-run` to the end. It reports what *would* happen and writes nothing.
+### Before a big pack (tens of GB, or longer than a few minutes)
+
+Do these three things first. They take a minute and save you from finding a problem an hour in.
+
+1. **Close Excel, AutoCAD, Outlook and similar** if they have files open inside the folder. Files that are open and locked get skipped (the rest still packs), so closing them means nothing is left out.
+2. **Do a dry run** — add `--dry-run` to the end of the command:
+
+   ```powershell
+   .\rfpack.exe pack "D:\Projects\Photo Archive" -o E:\transfer --chunk-mb 64 --dry-run
+   ```
+
+   It writes nothing, and tells you how many files there are and whether the output drive has room:
+
+   ```
+   Free space on the output drive: 1.6 TB (up to 49.9 GB may be needed) - OK
+   ```
+
+   If it says **NOT ENOUGH**, pick another `-o` drive before you start.
+3. **Laptop? Plug it in.** `rfpack` keeps Windows from going to sleep while it works, but it cannot stop a flat battery.
+
+### Running it again after a failed or interrupted attempt
+
+A pack that was stopped leaves its half-written chunks behind, and `rfpack` will not overwrite them unless you say so. Run the same command with `--force` added:
+
+```powershell
+.\rfpack.exe pack "D:\Projects\Photo Archive" -o E:\transfer --chunk-mb 64 --force
+```
+
+The source folder is only ever read, never changed, so starting again is always safe.
 
 ---
 
